@@ -1,0 +1,61 @@
+version: '3.5'
+
+services:
+  web:
+    image: "web"
+    build:
+      context: .
+      dockerfile: Web/Dockerfile
+    environment:
+      - rabbitconnstr=amqp://guest:guest@rabbitmqservice:5672
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - rabbitmqservice
+    networks:
+      - rabbitmq    
+
+  rabbitmqservice:
+    image: rabbitmq:3-management
+    hostname: host.docker.internal
+    container_name: rabbitmqservice
+    ports:
+      - "8080:15672"
+      - "5672:5672"
+    networks:
+      - rabbitmq
+
+  healthui:
+    image: "xabarilcoding/healthchecksui"
+    ports:
+      - "5000:80"
+    networks:
+      - rabbitmq
+    depends_on:
+      - web
+
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Consumer/Dockerfile
+    networks:
+      - rabbitmq
+    depends_on:
+      - rabbitmqservice
+
+  producer:
+    build:
+      context: .
+      dockerfile: Producer/Dockerfile
+    networks:
+      - rabbitmq
+    depends_on:
+      - rabbitmqservice
+
+networks:
+  rabbitmq: 
+    name: rabbitmq
+    external: true
+    driver: bridge
