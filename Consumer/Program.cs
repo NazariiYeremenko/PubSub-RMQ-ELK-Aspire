@@ -3,28 +3,26 @@ using Microsoft.Extensions.Hosting;
 
 namespace Consumer;
 
-internal class Program
+internal static class Program
 {
-    static void Main(string[] args)
+    private static void Main(string[] args)
     {
-        HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
+        var builder = Host.CreateApplicationBuilder(args);
 
         builder.Configuration.Sources.Clear();
 
-        var rabbitMqOptions = RabbitMqConfigurator.ConfigureRabbitMqOptions(builder);
-
-        builder.Configuration.GetSection(RabbitMqOptions.RbtMqOptions).Bind(rabbitMqOptions);
-
+        var rabbitMqOptions = ConstantsConfigurator.ConfigureRabbitMqOptions(builder);
+            
         var consumers = new List<Consumer>();
 
-        for (int consumerId = 0; consumerId < 3; consumerId++) 
+        for (var consumerId = 0; consumerId < 3; consumerId++) 
         {
             var consumer = new Consumer(rabbitMqOptions, consumerId);
             Console.WriteLine(consumer.CheckHealth().Description);
             consumers.Add(consumer);
         }
 
-        Thread.Sleep(rabbitMqOptions.ServiceLifetimeInMiliseconds);
+        Thread.Sleep(rabbitMqOptions.ServiceLifetimeInMilliseconds);
 
         foreach (var consumer in consumers)
         {

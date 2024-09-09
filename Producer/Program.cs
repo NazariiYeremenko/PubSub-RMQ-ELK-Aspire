@@ -7,22 +7,22 @@ using Serilog;
 
 namespace Producer;
 
-internal class Program
+internal static class Program
 {
-    private const string UriString = "tcp://127.0.0.1:23750";
-    private const string LogstashContainerPath = "http://docker-elk-logstash-1:50000";
-    static async Task Main(string[] args)
+    private static async Task Main(string[] args)
     {
-        HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
+        var builder = Host.CreateApplicationBuilder(args);
 
         builder.Configuration.Sources.Clear();
+        
+        var connectionStrings = ConstantsConfigurator.ConfigureConnectionsOptions(builder);
 
         builder.Services
         .AddSingleton(sp =>
          {
              var factory = new ConnectionFactory
              {
-                 Uri = new Uri(UriString),
+                 Uri = new Uri(connectionStrings.RMQConnectionUri),
                  AutomaticRecoveryEnabled = true
              };
              return factory.CreateConnection();
@@ -30,23 +30,23 @@ internal class Program
         .AddHealthChecks()
         .AddRabbitMQ();
 
-        var rabbitMqOptions = RabbitMqConfigurator.ConfigureRabbitMqOptions(builder);
+        var rabbitMqOptions = ConstantsConfigurator.ConfigureRabbitMqOptions(builder);
 
         var queuesAmount = rabbitMqOptions.QueueNames.Count;
 
         var tasks = new Task[queuesAmount];
 
-        for (int i = 0; i < queuesAmount; i++)
+        for (var i = 0; i < queuesAmount; i++)
         {
             var producer = new Producer(rabbitMqOptions, i);
-            tasks[i] = Task.Run(() => RunProducer(producer, rabbitMqOptions.QueueNames[i-1], rabbitMqOptions.ServiceLifetimeInMiliseconds));
+            tasks[i] = Task.Run(() => RunProducer(producer, rabbitMqOptions.QueueNames[i-1], rabbitMqOptions.ServiceLifetimeInMilliseconds, connectionStrings.LogstashConnection));
         }
         await Task.WhenAll(tasks);
     }
 
-    static async Task RunProducer(Producer producer, string queueName, int serviceLifetime)
+    private static async Task RunProducer(Producer producer, string queueName, int serviceLifetime, string logstashContainerPath)
     {
-        using var timer = new Timer((_) =>
+        await using var timer = new Timer((_) =>
         {
             var healthCheck = producer.CheckHealth();
             Console.WriteLine(healthCheck.Description);
@@ -57,11 +57,11 @@ internal class Program
 */          }
             var messageTemplate = $"This is sample message to {queueName}";
             producer.PublishMessage(messageTemplate, queueName);
-
+            
             Log.Logger = new LoggerConfiguration()
                 .Enrich.FromLogContext()
                 .Enrich.WithProperty("Producer", "Serilog.Sinks.LogstashHttp")
-                .WriteTo.LogstashHttp(LogstashContainerPath)
+                .WriteTo.LogstashHttp(logstashContainerPath)
                 .CreateLogger();
             Log.Information(messageTemplate, queueName);
             Log.CloseAndFlush();

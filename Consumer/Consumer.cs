@@ -2,14 +2,15 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Consumer.Models;
+
 
 namespace Consumer;
 
-public class Consumer : IDisposable
+public sealed class Consumer : IDisposable
 {
     private readonly IConnection _connection;
     private readonly IModel _channel;
-    private readonly HashSet<string> _receivedMessages;
     private readonly string _queueName;
     private readonly EventingBasicConsumer _consumer;
     private bool _disposed = false;
@@ -28,7 +29,7 @@ public class Consumer : IDisposable
         };
         _connection = factory.CreateConnection();
         _channel = _connection.CreateModel();
-        _receivedMessages = [];
+        HashSet<string> receivedMessages = [];
         _queueName = rabbitMqOptions.QueueNames[consumerId];
 
         _channel.ExchangeDeclare(exchange: rabbitMqOptions.ExchangeName, type: ExchangeType.Fanout);
@@ -53,10 +54,10 @@ public class Consumer : IDisposable
                 var message = Encoding.UTF8.GetString(body);
 
                 // Duplicated messages check
-                if (!_receivedMessages.Contains(message))
+                if (!receivedMessages.Contains(message))
                 {
                     Console.WriteLine($"Consumer {consumerId} received a message from {ea.RoutingKey}: {message}");
-                    _receivedMessages.Add(message);
+                    receivedMessages.Add(message);
                 }
 
                 _channel.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
@@ -111,17 +112,15 @@ public class Consumer : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    protected virtual void Dispose(bool disposing)
+    private void Dispose(bool disposing)
     {
-        if (!_disposed)
+        if (_disposed) return;
+        if (disposing)
         {
-            if (disposing)
-            {
-                _channel?.Dispose();
-                _connection?.Dispose();
-            }
-
-            _disposed = true;
+            _channel?.Dispose();
+            _connection?.Dispose();
         }
+
+        _disposed = true;
     }
 }

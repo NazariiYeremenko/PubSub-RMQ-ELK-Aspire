@@ -1,6 +1,6 @@
 ﻿using RabbitMQ.Client;
 using System.Text;
-using Consumer;
+using Consumer.Models;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Producer;
